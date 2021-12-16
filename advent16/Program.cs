@@ -17,6 +17,8 @@ var binaryTransmission = sb.ToString();
 rootPacket.Print();
 //a
 Console.WriteLine(rootPacket.VersionSum());
+//b
+Console.WriteLine(rootPacket.Calculate());
 
 
 abstract class Packet
@@ -46,6 +48,7 @@ abstract class Packet
 
     public abstract void Print(int level = 0);
     public abstract int VersionSum();
+    public abstract long Calculate();
 }
 
 
@@ -71,13 +74,7 @@ class LiteralValuePacket : Packet
             }
         }
 
-        //while(parserPosition % 4 != 0)
-        //{
-        //    parserPosition++;
-        //}
-
         return (new LiteralValuePacket(Convert.ToInt64(value, 2), version, typeId), parserPosition);
-
     }
 
     public override void Print(int level = 0)
@@ -92,6 +89,11 @@ class LiteralValuePacket : Packet
     public override int VersionSum()
     {
         return Version;
+    }
+
+    public override long Calculate()
+    {
+        return Value;
     }
 
     public long Value { get; set; }
@@ -109,19 +111,17 @@ class OperatorPacket : Packet
     public static (Packet Packet, int ParserPosition) Parse(int version, int typeId, string binaryInput, int parserPosition)
     {
         var lengthTypeId = int.Parse(binaryInput.Substring(parserPosition, 1));
-        var length = 0;
-
         parserPosition++;
 
         var subPackets = new List<Packet>();
 
-        if(lengthTypeId == 0)
+        int length;
+        if (lengthTypeId == 0)
         {
             var subPacketLength = Convert.ToInt32(binaryInput.Substring(parserPosition, 15), 2);
             length = subPacketLength;
             parserPosition += 15;
-            //var subPacketString = binaryInput.Substring(parserPosition, subPacketLength);
-            //parserPosition += subPacketLength;
+
             var positionAfterParse = parserPosition + subPacketLength + 1;
             while (parserPosition + 6 < positionAfterParse)
             {
@@ -129,14 +129,13 @@ class OperatorPacket : Packet
                 subPackets.Add(subPacket);
             }
 
-            
+
         }
         else
         {
             var subPacketCount = Convert.ToInt32(binaryInput.Substring(parserPosition, 11), 2);
             length = subPacketCount;
             parserPosition += 11;
-            //var subPacketString = binaryInput.Substring(parserPosition);
 
             for (int i = 0; i < subPacketCount; i++)
             {
@@ -144,11 +143,6 @@ class OperatorPacket : Packet
                 subPackets.Add(subPacket);
             }
         }
-
-        //while (parserPosition % 4 != 0)
-        //{
-        //    parserPosition++;
-        //}
 
         return (new OperatorPacket(lengthTypeId, length, subPackets, version, typeId), parserPosition);
     }
@@ -170,6 +164,83 @@ class OperatorPacket : Packet
     public override int VersionSum()
     {
         return Version + SubPackets.Select(p => p.VersionSum()).Sum();
+    }
+
+    public override long Calculate()
+    {
+        switch(TypeId)
+        {
+            case 0:
+                return Sum();
+            case 1:
+                return Product();
+            case 2:
+                return Minimum();
+            case 3:
+                return Maximum();
+            case 5:
+                return Greater();
+            case 6:
+                return Less();
+            case 7:
+                return Equal();
+            default:
+                throw new Exception("Unrecognized type id");
+        }
+    }
+
+    public long Sum()
+    {
+        return SubPackets.Sum(p => p.Calculate());
+    }
+
+    public long Product()
+    {
+        if(SubPackets.Count() == 1)
+        {
+            return SubPackets.First().Calculate();
+        }
+        return SubPackets.Aggregate(1L, (r, p) => r * p.Calculate());
+    }
+
+    public long Minimum()
+    {
+        return SubPackets.Min(p => p.Calculate());
+    }
+
+    public long Maximum()
+    {
+        return SubPackets.Max(p => p.Calculate());
+    }
+
+    public long Greater()
+    {
+        if(SubPackets.First().Calculate() > SubPackets.Skip(1).First().Calculate())
+        {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    public long Less()
+    {
+        if (SubPackets.First().Calculate() < SubPackets.Skip(1).First().Calculate())
+        {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    public long Equal()
+    {
+        if (SubPackets.First().Calculate() == SubPackets.Skip(1).First().Calculate())
+        {
+            return 1;
+        }
+
+        return 0;
     }
 
     public int LengthTypeId { get; set; }
