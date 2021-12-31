@@ -18,11 +18,6 @@ while(boardStack.Count > 0)
         continue;
     }
 
-    if(current.Cost == 40)
-    {
-        int x = 2;
-    }
-
     if(current.IsFinished())
     {
         var cost = current.Cost;
